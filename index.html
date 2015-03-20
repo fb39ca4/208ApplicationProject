@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html><head>
+<title>WebGL Image Scaling Demo</title>
+<meta http-equiv="content-type" content="text/html; charset=utf8">
+<script type="text/javascript" src="webgl-debug.js"></script>
+<script type="text/javascript" src="glhelper.js"></script>
+<script type="text/javascript" src="voxel.js"></script>
+
+<script id="fullscreen_vs" type="x-shader/x-vertex">
+attribute vec2 aPos;
+
+uniform vec2 uTopLeft;
+uniform vec2 uBottomRight;
+
+varying vec2 vPos;
+
+void main(void) {
+    vPos = (vec2(aPos.x, -aPos.y) + 1.0) / 2.0;
+    vPos = mix(uTopLeft, uBottomRight, vPos);
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+</script>
+<script id="fullscreen_fs_nearest" type="x-shader/x-fragment">
+#ifdef GL_ES
+precision highp float;
+#endif
+uniform vec2 uTopLeft;
+uniform vec2 uBottomRight;
+uniform vec2 uImageSize;
+uniform sampler2D uSampler;
+
+varying vec2 vPos;
+
+vec4 sample(vec2 coord) {
+    if (coord.x != mod(coord.x, uImageSize.x)) return vec4(0.0, 0.0, 0.0, 1.0);
+    if (coord.y != mod(coord.y, uImageSize.y)) return vec4(0.0, 0.0, 0.0, 1.0);
+    else return texture2D(uSampler, coord / uImageSize);
+}
+
+vec4 filter(vec2 coord) {
+    return sample(floor(coord) + 0.5);
+}
+
+void main(void) {
+    float a = 0.0;
+    a = texture2D(uSampler, gl_FragCoord.xy).r;
+    gl_FragColor = filter(vPos);//vec4(texture2D(uSampler, vPos/uImageSize).rgb, 1.0);
+    gl_FragColor.a = 1.0;
+    //gl_FragColor = vec4(mod(vPos, 1.0 + 0.00000 * uBottomRight), 0.0, 1.0);
+    //gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+}
+</script>
+<script id="fullscreen_fs_bilinear" type="x-shader/x-fragment">
+#ifdef GL_ES
+precision highp float;
+#endif
+uniform vec2 uTopLeft;
+uniform vec2 uBottomRight;
+uniform vec2 uImageSize;
+uniform sampler2D uSampler;
+
+varying vec2 vPos;
+
+vec4 sample(vec2 coord) {
+    if (coord.x != mod(coord.x, uImageSize.x)) return vec4(0.0, 0.0, 0.0, 1.0);
+    if (coord.y != mod(coord.y, uImageSize.y)) return vec4(0.0, 0.0, 0.0, 1.0);
+    else return texture2D(uSampler, coord / uImageSize);
+}
+
+vec4 filter(vec2 coord) {
+    return sample(coord);
+}
+
+void main(void) {
+    float a = 0.0;
+    a = texture2D(uSampler, gl_FragCoord.xy).r;
+    gl_FragColor = filter(vPos);//vec4(texture2D(uSampler, vPos/uImageSize).rgb, 1.0);
+    gl_FragColor.a = 1.0;
+    //gl_FragColor = vec4(mod(vPos, 1.0 + 0.00000 * uBottomRight), 0.0, 1.0);
+    //gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+}
+</script>
+
+<script id="fullscreen_fs_bicubic_naive" type="x-shader/x-fragment">
+#ifdef GL_ES
+precision highp float;
+#endif
+uniform vec2 uTopLeft;
+uniform vec2 uBottomRight;
+uniform vec2 uImageSize;
+uniform sampler2D uSampler;
+
+varying vec2 vPos;
+
+vec4 sample(vec2 coord) {
+    if (coord.x != mod(coord.x, uImageSize.x)) return vec4(0.0, 0.0, 0.0, 1.0);
+    if (coord.y != mod(coord.y, uImageSize.y)) return vec4(0.0, 0.0, 0.0, 1.0);
+    else return texture2D(uSampler, (coord) / uImageSize);
+}
+
+vec4 filter(vec2 coord) {
+    vec4 a00, a10, a20, a30, a01, a11, a21, a31, a02, a12, a22, a32, a03, a13, a23, a33;
+    vec2 iCoord = floor(coord);
+    vec2 c1 = iCoord;
+    vec2 c2 = c1 * iCoord;
+    vec2 c3 = c2 * iCoord;
+    vec2 c4 = c2 * c2;
+    vec2 fCoord = mod(coord, 1.0);
+
+    vec4 s0 = sample(coord + vec2(-1.0, -1.0));
+    vec4 s1 = sample(coord + vec2(0.0, -1.0));
+    vec4 s2 = sample(coord + vec2(1.0, -1.0));
+    vec4 s3 = sample(coord + vec2(2.0, -1.0));
+    vec4 s4 = sample(coord + vec2(-1.0, 0.0));
+    vec4 s5 = sample(coord + vec2(0.0, 0.0));
+    vec4 s6 = sample(coord + vec2(1.0, 0.0));
+    vec4 s7 = sample(coord + vec2(2.0, 0.0));
+    vec4 s8 = sample(coord + vec2(-1.0, 1.0));
+    vec4 s9 = sample(coord + vec2(0.0, 1.0));
+    vec4 s10 = sample(coord + vec2(1.0, 1.0));
+    vec4 s11 = sample(coord + vec2(2.0, 1.0));
+    vec4 s12 = sample(coord + vec2(-1.0, 2.0));
+    vec4 s13 = sample(coord + vec2(0.0, 2.0));
+    vec4 s14 = sample(coord + vec2(1.0, 2.0));
+    vec4 s15 = sample(coord + vec2(2.0, 2.0));
+
+    /*vec4 f00, f10, f01, f11, fx00, fx10, fx01, fx11, fy00, fy10, fy01, fy11, fxy00, fxy10, fxy01, fxy11;
+
+    f00 = s5;
+    f10 = s6;
+    f01 = s9;
+    f10 = s10;
+    fx00 = s6 - s4;
+    fx10 = s7 - s5;
+    fx01 = s10 - s8;
+    fx11 = s11 - s9;
+    fy00 = s9 - s1;
+    fy10 = s10 - s2;
+    fy01 = s13 - s5;
+    fy11 = s14 - s6;
+    fxy00 = fy10 - (s8 - s0);
+    fxy01 = (s11 - s3) - fy00;
+    fxy10 = fy11 - (s12 - s0);
+    fxy11 = (s15 - s7) - fy01;
+    fx00 *= 0.5;
+    fx10 *= 0.5;
+    fx01 *= 0.5;
+    fx11 *= 0.5;
+    fy00 *= 0.5;
+    fy10 *= 0.5;
+    fy01 *= 0.5;
+    fy11 *= 0.5;
+    fxy00 *= 0.25;
+    fxy10 *= 0.25;
+    fxy01 *= 0.25;
+    fxy11 *= 0.25;*/
+
+    a00 = s5;
+    a10 = -0.5*s4 + 0.5*s6;
+    a20 = s4 + -2.5*s5 + 2.0*s6 + -0.5*s7;
+    a30 = -0.5*s4 + 1.5*s5 + -1.5*s6 + 0.5*s7;
+
+    a01 = -5*s1 + 0.5*s9;
+    a11 = 0.25*s0 + -0.25*s2;
+    a21 = -0.5*s0 + 14.75*s1 + -15.5*s2 + 0.25*s3 + 0.5*s8 + -1.25*s9 + s10 + -0.25*s11;
+    a31 = 0.25*s0 + -9.75*s1 + 9.75*s2 + -0.25*s3 + -0.25*s8 + 0.75*s9 + -0.75*s10 + 0.25*s11;
+
+    a02 = 10.0*s1;
+
+    vec4 m1 = mix(s5, s6, fCoord.x);
+    vec4 m2 = mix(s9, s10, fCoord.x);
+    //vec4 m1 = mix(f00, f10, fCoord.x);
+    //vec4 m2 = mix(f01, f11, fCoord.x);
+    return mix(m1, m2, fCoord.y);
+}
+
+void main(void) {
+    float a = 0.0;
+    a = texture2D(uSampler, gl_FragCoord.xy).r;
+    gl_FragColor = filter(vPos);//vec4(texture2D(uSampler, vPos/uImageSize).rgb, 1.0);
+    gl_FragColor.a = 1.0;
+    //gl_FragColor = vec4(mod(vPos, 1.0 + 0.00000 * uBottomRight), 0.0, 1.0);
+    //gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+}
+</script>
+
+<script id="fullscreen_fs_bicubic" type="x-shader/x-fragment">
+#ifdef GL_ES
+precision highp float;
+#endif
+uniform vec2 uTopLeft;
+uniform vec2 uBottomRight;
+uniform vec2 uImageSize;
+uniform sampler2D uSampler;
+
+varying vec2 vPos;
+
+vec4 sample(vec2 coord) {
+    if (coord.x != mod(coord.x, uImageSize.x)) return vec4(0.0, 0.0, 0.0, 1.0);
+    if (coord.y != mod(coord.y, uImageSize.y)) return vec4(0.0, 0.0, 0.0, 1.0);
+    else return texture2D(uSampler, (coord) / uImageSize);
+}
+//The naive implementation of a bicubic filter requires 16 texture lookups and a lot of adding and multiplication.
+//Because of this, it might not be compatible with some WebGL implementations.
+//This is a more optimized version that uses native texture filtering.
+//This is not my work, it was written by Dave Hoskins at https://www.shadertoy.com/view/4df3Dn
+
+
+// 4x4 bicubic filter using 4 bilinear texture lookups
+// See GPU Gems 2: "Fast Third-Order Texture Filtering", Sigg & Hadwiger:
+// http://http.developer.nvidia.com/GPUGems2/gpugems2_chapter20.html
+
+// w0, w1, w2, and w3 are the four cubic B-spline basis functions
+float w0(float a)
+{
+    return (1.0/6.0)*(a*(a*(-a + 3.0) - 3.0) + 1.0);
+}
+
+float w1(float a)
+{
+    return (1.0/6.0)*(a*a*(3.0*a - 6.0) + 4.0);
+}
+
+float w2(float a)
+{
+    return (1.0/6.0)*(a*(a*(-3.0*a + 3.0) + 3.0) + 1.0);
+}
+
+float w3(float a)
+{
+    return (1.0/6.0)*(a*a*a);
+}
+
+// g0 and g1 are the two amplitude functions
+float g0(float a)
+{
+    return w0(a) + w1(a);
+}
+
+float g1(float a)
+{
+    return w2(a) + w3(a);
+}
+
+// h0 and h1 are the two offset functions
+float h0(float a)
+{
+    return -1.0 + w1(a) / (w0(a) + w1(a));
+}
+
+float h1(float a)
+{
+    return 1.0 + w3(a) / (w2(a) + w3(a));
+}
+
+vec4 texture2D_bicubic(sampler2D tex, vec2 uv, vec2 res)
+{
+	uv = uv + 0.5;
+	vec2 iuv = floor( uv );
+	vec2 fuv = fract( uv );
+
+    float g0x = g0(fuv.x);
+    float g1x = g1(fuv.x);
+    float h0x = h0(fuv.x);
+    float h1x = h1(fuv.x);
+    float h0y = h0(fuv.y);
+    float h1y = h1(fuv.y);
+
+	vec2 p0 = (vec2(iuv.x + h0x, iuv.y + h0y) - 0.5) / res;
+	vec2 p1 = (vec2(iuv.x + h1x, iuv.y + h0y) - 0.5) / res;
+	vec2 p2 = (vec2(iuv.x + h0x, iuv.y + h1y) - 0.5) / res;
+	vec2 p3 = (vec2(iuv.x + h1x, iuv.y + h1y) - 0.5) / res;
+
+    return g0(fuv.y) * (g0x * texture2D(tex, p0)  +
+                        g1x * texture2D(tex, p1)) +
+           g1(fuv.y) * (g0x * texture2D(tex, p2)  +
+                        g1x * texture2D(tex, p3));
+}
+
+void main(void) {
+    float a = 0.0;
+    a = texture2D(uSampler, gl_FragCoord.xy).r;
+    if (vPos.x != mod(vPos.x, uImageSize.x)) gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    else if (vPos.y != mod(vPos.y, uImageSize.y)) gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    else {
+        gl_FragColor = texture2D_bicubic(uSampler, vPos, uImageSize);
+        gl_FragColor.a = 1.0;
+    }
+}
+</script>
+
+<script type="text/javascript">
+
+function getUrlParams() {
+  var raw = window.location.search.substring(1).split("&");
+  var processed = {};
+  for (var i = 0; i < raw.length; i++) {
+    var name = raw[i].substring(0, raw[i].indexOf("="));
+    var arg = raw[i].substring(raw[i].indexOf("=") + 1);
+    if (name) processed[name.toLowerCase()] = arg;
+  }
+  return processed;
+}
+
+var mouse;
+
+function engineInit() {
+    var canvas = document.getElementById("canvas");
+    mouse = {click:false};
+    mouseDisplay = document.getElementById("mouseDisplay");
+    canvas.addEventListener('mousedown', function(event) {
+        mouse.click = true;
+        mouseDisplay.textContent = "Mouse: " + JSON.stringify(mouse);
+    });
+    window.addEventListener('mouseup', function(event) {
+        mouse.click = false;
+        mouseDisplay.textContent = "Mouse: " + JSON.stringify(mouse);
+    });
+    canvas.addEventListener('mousemove', function(event) {
+        mouse.x = event.clientX;
+        mouse.y = event.clientY;
+        mouseDisplay.textContent = "Mouse: " + JSON.stringify(mouse);
+    });
+
+    glhelper = new GlHelper(canvas);
+    voxelengine = new VoxelEngine();
+    voxelengine.renderSetup(glhelper);
+    loadImageFromURL('{"url":"doge.jpg","x":310,"y":140,"zoom":16}');
+    voxelengine.tick();
+    document.getElementById("input_image").addEventListener("load", updateImage);
+    document.getElementsByTagName("select")[0].selectedIndex = 0;
+    document.getElementsByTagName("select")[1].selectedIndex = 2;
+}
+
+function updateImage() {
+    console.log("loading new image");
+    if (voxelengine) {
+        voxelengine.updateTexture("input_image");
+    }
+    if (!voxelengine.player.setposition) {
+        voxelengine.player.viewX = 0;
+        voxelengine.player.viewY = 0;
+        voxelengine.player.zoom = 4;
+        voxelengine.player.setposition = false;
+    }
+
+}
+
+function increaseZoom() {
+    voxelengine.player.zoom *= 2;
+}
+
+function decreaseZoom() {
+    voxelengine.player.zoom /= 2;
+    voxelengine.player.zoom = Math.max(voxelengine.player.zoom, 1);
+}
+
+function loadImageFromFile() {
+    document.getElementById("input_image").src = window.URL.createObjectURL(document.getElementById('file_input').files[0]);
+}
+
+function loadImageFromURL(object) {
+    object = JSON.parse(object);
+    document.getElementById("input_image").src = object.url;
+    var i = document.getElementById("input_image");
+    voxelengine.player.viewX = object.x;
+    voxelengine.player.viewY = object.y;
+    voxelengine.player.zoom = object.zoom;
+    voxelengine.player.setposition = true;
+}
+
+function chooseShader(type) {
+    switch (type) {
+        case "nearest":
+            voxelengine.fullscreenShaderProgram = voxelengine.nearestShader;
+            break;
+        case "bilinear":
+            voxelengine.fullscreenShaderProgram = voxelengine.bilinearShader;
+            break;
+        case "bicubic":
+            voxelengine.fullscreenShaderProgram = voxelengine.bicubicShader;
+            break;
+        default:
+    }
+}
+
+</script>
+
+
+</head>
+
+
+<body onload="engineInit();">
+    <div>
+        Amar Shah<br/>
+        Math 208<br/>
+        Application Project - Bicubic Scaling
+    </div><br/>
+    <br/>
+    <div>Controls: Click and drag to pan, + and - to zoom in and out.</div>
+    Open Image: <input id="file_input" type="file" accept="image/*" onchange="loadImageFromFile()"/><br/>
+    <img id="input_image" src="doge.jpg" width="0" height="0"/>
+    Select Image: <select onchange="loadImageFromURL(this.options[this.selectedIndex].value)">
+        <option value='{"url":"doge.jpg","x":310,"y":140,"zoom":16}' selected>doge</option>
+        <option value='{"url":"parrot.jpg","x":454,"y":192,"zoom":8}' selected>parrot</option>
+        <option value='{"url":"noise.png","x":128,"y":128,"zoom":16}'>noise</option>
+    </select><br/>
+    Scaling Algorithm: <select onchange="chooseShader(this.options[this.selectedIndex].value)">
+        <option value="nearest">Nearest Neighbor</option>
+        <option value="bilinear">Bilinear</option>
+        <option value="bicubic" selected>Bicubic</option>
+    </select>
+    Zoom: <button onclick="increaseZoom()">+</button><button onclick="decreaseZoom()">-</button><br/>
+    <canvas id="canvas" style="border: none;" width="1280" height="720"></canvas>
+    <br>
+    <div id="playerDisplay"></div>
+    <div id="mouseDisplay">Mouse: {}</div>
+
+</body></html>
